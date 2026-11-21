@@ -1,0 +1,42 @@
+name: Build JobPilot Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project
+        run: flutter create --platforms=android --org com.megworld --project-name jobpilot_mobile .
+
+      - name: Set Android app display name
+        run: |
+          sed -i 's/android:label="jobpilot_mobile"/android:label="JobPilot AI"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Install Flutter packages
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: JobPilot-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
