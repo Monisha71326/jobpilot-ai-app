@@ -326,7 +326,33 @@ class _ApplicationsScreenState extends State<ApplicationsScreen>{List rows=[];St
 
 class ResumesScreen extends StatefulWidget{const ResumesScreen({super.key});@override State<ResumesScreen> createState()=>_ResumesScreenState();}
 class _ResumesScreenState extends State<ResumesScreen>{List rows=[];@override void initState(){super.initState();load();}Future<void>load()async{try{final r=await Api.request('/resumes/');if(mounted)setState(()=>rows=r);}catch(e){_snack(context,e.toString());}}
- Future<void>pick()async{final f=await FilePicker.platform.pickFiles(type:FileType.custom,allowedExtensions:['pdf','docx'],withData:false);if(f==null)return;try{await Api.upload('/resumes/',f.files.single.path!,f.files.single.name);load();_snack(context,'Resume uploaded and parsed');}catch(e){_snack(context,e.toString());}}
+ Future<void> pick() async {
+    try {
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'docx'],
+      );
+
+      if (file == null) return;
+
+      final filePath = file.path;
+      if (filePath == null || filePath.isEmpty) {
+        _snack(context, 'Unable to access the selected file.');
+        return;
+      }
+
+      await Api.upload('/resumes/', filePath, file.name);
+
+      if (!mounted) return;
+      await load();
+      if (!mounted) return;
+      _snack(context, 'Resume uploaded and parsed');
+    } catch (e) {
+      if (mounted) {
+        _snack(context, e.toString());
+      }
+    }
+  }
  @override Widget build(BuildContext context)=>PageFrame(title:'Build a stronger resume',subtitle:'Upload a PDF or DOCX and get ATS analysis.',child:Column(children:[FilledButton.icon(onPressed:pick,icon:const Icon(Icons.upload_file),label:const Text('Upload resume')),const SizedBox(height:14),if(rows.isEmpty)const Text('No resume uploaded yet.'),for(final r in rows)Card(child:ListTile(leading:const Icon(Icons.description,color:blue,size:32),title:Text('${r['title']}',style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text('${r['skills']?.length??0} skills · ${r['is_primary']==true?'Primary resume':'Resume'}'),trailing:PopupMenuButton<String>(onSelected:(s)async{try{await Api.request('/resumes/${r['id']}/$s/',method:'POST');load();}catch(e){_snack(context,e.toString());}},itemBuilder:(_)=>const [PopupMenuItem(value:'analyze',child:Text('Analyse resume')),PopupMenuItem(value:'set-primary',child:Text('Set as primary'))])))]));}
 
 class AssistantScreen extends StatefulWidget{const AssistantScreen({super.key});@override State<AssistantScreen> createState()=>_AssistantScreenState();}
