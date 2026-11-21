@@ -4,7 +4,8 @@ name: Build JobPilot Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -14,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout source code
+      # 1. Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
 
@@ -31,76 +32,48 @@ jobs:
         run: |
           flutter create --platforms=android --org com.megworld --project-name jobpilot_mobile .
 
-      # 4. Configure App compileSdk
+      # 4. Configure Android compile SDK 36
       - name: Configure Android compile SDK
         working-directory: jobpilot_flutter_v2
         shell: bash
         run: |
           if [ -f android/app/build.gradle.kts ]; then
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+            sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts
           elif [ -f android/app/build.gradle ]; then
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
+            sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
           else
-            echo "Android app Gradle file not found"
+            echo "ERROR: Android Gradle file not found"
             exit 1
           fi
 
-          echo "App compileSdk configuration:"
-          grep -n "compileSdk" android/app/build.gradle* || true
+          echo "Checking compileSdk:"
+          grep -n "compileSdk" android/app/build.gradle*
 
-      # 5. Set app display name
+      # 5. Set application name
       - name: Set app name
         working-directory: jobpilot_flutter_v2
         run: |
           sed -i 's/android:label="jobpilot_mobile"/android:label="JobPilot AI"/' android/app/src/main/AndroidManifest.xml
 
-      # 6. Install Flutter packages
+      # 6. Install Flutter dependencies
       - name: Install packages
         working-directory: jobpilot_flutter_v2
-        run: flutter pub get
-
-      # 7. Fix file_picker plugin compileSdk
-      - name: Configure file_picker Android SDK
-        shell: bash
         run: |
-          PUB_CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+          flutter pub get
 
-          mapfile -d '' FILES < <(
-            find "$PUB_CACHE/hosted/pub.dev" -type f \
-              \( -path '*/file_picker-*/android/build.gradle' \
-              -o -path '*/file_picker-*/android/build.gradle.kts' \) \
-              -print0
-          )
-
-          if [ "${#FILES[@]}" -eq 0 ]; then
-            echo "file_picker Android Gradle file not found"
-            exit 1
-          fi
-
-          for FILE in "${FILES[@]}"; do
-            echo "Updating $FILE"
-
-            sed -i -E \
-              's/compileSdkVersion[[:space:]]+34/compileSdkVersion 36/g; s/compileSdk[[:space:]]*=[[:space:]]*34/compileSdk = 36/g' \
-              "$FILE"
-
-            echo "Updated compileSdk configuration:"
-            grep -n "compileSdk" "$FILE" || true
-
-            if grep -Eq 'compileSdkVersion[[:space:]]+34|compileSdk[[:space:]]*=[[:space:]]*34' "$FILE"; then
-              echo "ERROR: file_picker is still using compileSdk 34"
-              exit 1
-            fi
-          done
-
-          echo "file_picker SDK configuration completed."
+      # 7. Verify Flutter dependencies
+      - name: Verify file_picker version
+        working-directory: jobpilot_flutter_v2
+        run: |
+          flutter pub deps | grep file_picker
 
       # 8. Build release APK
       - name: Build APK
         working-directory: jobpilot_flutter_v2
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
 
-      # 9. Upload APK artifact
+      # 9. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
