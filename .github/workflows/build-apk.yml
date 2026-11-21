@@ -14,88 +14,93 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout source code
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # 2. Install Flutter
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # 3. Generate Android project
       - name: Generate Android project
         working-directory: jobpilot_flutter_v2
         run: |
           flutter create --platforms=android --org com.megworld --project-name jobpilot_mobile .
 
-      # Set compileSdk to 36 and verify the result
-      - name: Fix Android compile SDK
+      # 4. Configure App compileSdk
+      - name: Configure Android compile SDK
         working-directory: jobpilot_flutter_v2
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/' android/app/build.gradle.kts
+          elif [ -f android/app/build.gradle ]; then
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 36/' android/app/build.gradle
+          else
+            echo "Android app Gradle file not found"
+            exit 1
+          fi
 
-          files = [
-              Path("android/app/build.gradle.kts"),
-              Path("android/app/build.gradle"),
-          ]
+          echo "App compileSdk configuration:"
+          grep -n "compileSdk" android/app/build.gradle* || true
 
-          found = False
-
-          for file in files:
-              if not file.exists():
-                  continue
-
-              content = file.read_text()
-
-              if file.name.endswith(".kts"):
-                  updated, count = re.subn(
-                      r'compileSdk\s*=\s*.*',
-                      'compileSdk = 36',
-                      content
-                  )
-              else:
-                  updated, count = re.subn(
-                      r'compileSdkVersion\s+.*',
-                      'compileSdkVersion 36',
-                      content
-                  )
-
-              if count > 0:
-                  file.write_text(updated)
-                  print(f"Updated: {file}")
-                  found = True
-
-              print(f"\n--- {file} ---")
-              print(file.read_text())
-
-          if not found:
-              raise SystemExit("ERROR: Could not find compileSdk setting!")
-
-          combined = "\n".join(
-              f.read_text() for f in files if f.exists()
-          )
-
-          if not re.search(r'compileSdk\s*=\s*36|compileSdkVersion\s+36', combined):
-              raise SystemExit("ERROR: compileSdk 36 was not applied!")
-
-          print("SUCCESS: Android compileSdk is set to 36.")
-
+      # 5. Set app display name
       - name: Set app name
         working-directory: jobpilot_flutter_v2
         run: |
           sed -i 's/android:label="jobpilot_mobile"/android:label="JobPilot AI"/' android/app/src/main/AndroidManifest.xml
 
+      # 6. Install Flutter packages
       - name: Install packages
         working-directory: jobpilot_flutter_v2
         run: flutter pub get
 
+      # 7. Fix file_picker plugin compileSdk
+      - name: Configure file_picker Android SDK
+        shell: bash
+        run: |
+          PUB_CACHE="${PUB_CACHE:-$HOME/.pub-cache}"
+
+          mapfile -d '' FILES < <(
+            find "$PUB_CACHE/hosted/pub.dev" -type f \
+              \( -path '*/file_picker-*/android/build.gradle' \
+              -o -path '*/file_picker-*/android/build.gradle.kts' \) \
+              -print0
+          )
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "file_picker Android Gradle file not found"
+            exit 1
+          fi
+
+          for FILE in "${FILES[@]}"; do
+            echo "Updating $FILE"
+
+            sed -i -E \
+              's/compileSdkVersion[[:space:]]+34/compileSdkVersion 36/g; s/compileSdk[[:space:]]*=[[:space:]]*34/compileSdk = 36/g' \
+              "$FILE"
+
+            echo "Updated compileSdk configuration:"
+            grep -n "compileSdk" "$FILE" || true
+
+            if grep -Eq 'compileSdkVersion[[:space:]]+34|compileSdk[[:space:]]*=[[:space:]]*34' "$FILE"; then
+              echo "ERROR: file_picker is still using compileSdk 34"
+              exit 1
+            fi
+          done
+
+          echo "file_picker SDK configuration completed."
+
+      # 8. Build release APK
       - name: Build APK
         working-directory: jobpilot_flutter_v2
         run: flutter build apk --release
 
+      # 9. Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
