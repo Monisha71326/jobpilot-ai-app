@@ -4,7 +4,8 @@ name: Build JobPilot Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -14,21 +15,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repository
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # 2. Install Flutter
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      # 3. Generate Android project
       - name: Generate Android project
         working-directory: jobpilot_flutter_v2
         run: |
           flutter create --platforms=android --org com.megworld --project-name jobpilot_mobile .
 
-      - name: Configure App compile SDK
+      # 4. Configure Android compile SDK 36
+      - name: Configure Android compile SDK
         working-directory: jobpilot_flutter_v2
         shell: bash
         run: |
@@ -37,60 +42,38 @@ jobs:
           elif [ -f android/app/build.gradle ]; then
             sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
           else
-            echo "App Gradle file not found"
+            echo "ERROR: Android Gradle file not found"
             exit 1
           fi
 
+          echo "Checking compileSdk:"
           grep -n "compileSdk" android/app/build.gradle*
 
+      # 5. Set application name
       - name: Set app name
         working-directory: jobpilot_flutter_v2
         run: |
           sed -i 's/android:label="jobpilot_mobile"/android:label="JobPilot AI"/' android/app/src/main/AndroidManifest.xml
 
+      # 6. Install Flutter dependencies
       - name: Install packages
         working-directory: jobpilot_flutter_v2
-        run: flutter pub get
-
-      - name: Fix file_picker compile SDK
-        shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import os
+          flutter pub get
 
-          cache = Path(os.environ.get("PUB_CACHE", str(Path.home() / ".pub-cache")))
-          files = list(cache.glob("hosted/pub.dev/file_picker-*/android/build.gradle"))
-          files += list(cache.glob("hosted/pub.dev/file_picker-*/android/build.gradle.kts"))
+      # 7. Verify Flutter dependencies
+      - name: Verify file_picker version
+        working-directory: jobpilot_flutter_v2
+        run: |
+          flutter pub deps | grep file_picker
 
-          if not files:
-              raise SystemExit("ERROR: file_picker Gradle file not found")
-
-          for file in files:
-              content = file.read_text()
-
-              pattern = r'(?m)^(\s*compileSdk(?:Version)?\s*(?:=\s*)?)(?:flutter\.compileSdkVersion|\d+)'
-              updated, count = re.subn(pattern, r'\g<1>36', content)
-
-              if count == 0:
-                  print(content)
-                  raise SystemExit(f"ERROR: compileSdk setting not found in {file}")
-
-              file.write_text(updated)
-
-              print(f"Updated: {file}")
-              for line in updated.splitlines():
-                  if "compileSdk" in line:
-                      print(line)
-
-          print("SUCCESS: file_picker compileSdk updated to 36")
-          PY
-
+      # 8. Build release APK
       - name: Build APK
         working-directory: jobpilot_flutter_v2
-        run: flutter build apk --release
+        run: |
+          flutter build apk --release
 
+      # 9. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
