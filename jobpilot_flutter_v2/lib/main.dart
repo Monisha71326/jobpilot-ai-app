@@ -185,7 +185,138 @@ class _DashboardScreenState extends State<DashboardScreen>{Map<String,dynamic>? 
 
 class JobsScreen extends StatefulWidget{const JobsScreen({super.key});@override State<JobsScreen> createState()=>_JobsScreenState();}
 class _JobsScreenState extends State<JobsScreen>{List items=[];bool loading=true;String q='';@override void initState(){super.initState();load();}Future<void>load()async{setState(()=>loading=true);try{final r=await Api.request('/jobs/',query:{'search':q});items=(r['results']??[]) as List;}catch(e){_snack(context,e.toString());}if(mounted)setState(()=>loading=false);}
- @override Widget build(BuildContext context)=>PageFrame(title:'Discover your next role',subtitle:'Relevant opportunities with explainable match scores.',child:Column(children:[TextField(onSubmitted:(v){q=v;load();},decoration:InputDecoration(hintText:'Search title, company or skills',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.tune),onPressed:load))),const SizedBox(height:14),if(loading)const CircularProgressIndicator() else if(items.isEmpty)const Text('No jobs found. Try another search or refresh job sources.') else for(final j in items)Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Row(children:[Expanded(child:Text('${j['title']}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:17))),if(j['match_score']!=null)Text('${j['match_score']}% match',style:const TextStyle(color:blue,fontWeight:FontWeight.bold))]),Text('${j['company']} · ${j['location']??'Location not listed'}',style:const TextStyle(color:Colors.blueGrey)),const SizedBox(height:10),Text((j['snippet']??'').toString(),maxLines:3,overflow:TextOverflow.ellipsis),const SizedBox(height:8),Wrap(spacing:8,children:[OutlinedButton.icon(onPressed:()async{try{if(j['is_saved']==true){await Api.request('/saved-jobs/${j['id']}/',method:'DELETE');}else{await Api.request('/saved-jobs/',method:'POST',body:{'job_id':j['id']});}load();}catch(e){_snack(context,e.toString());}},icon:const Icon(Icons.bookmark_border),label:Text(j['is_saved']==true?'Saved':'Save')),FilledButton.tonal(onPressed:()async{try{await Api.request('/applications/',method:'POST',body:{'job_id':j['id']});_snack(context,'Added to your application tracker');}catch(e){_snack(context,e.toString());}},child:const Text('Track job'))])]))]));}
+  @override
+  Widget build(BuildContext context) {
+    return PageFrame(
+      title: 'Discover your next role',
+      subtitle: 'Relevant opportunities with explainable match scores.',
+      child: Column(
+        children: [
+          TextField(
+            onSubmitted: (value) {
+              q = value;
+              load();
+            },
+            decoration: InputDecoration(
+              hintText: 'Search title, company or skills',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.tune),
+                onPressed: load,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (loading)
+            const CircularProgressIndicator()
+          else if (items.isEmpty)
+            const Text(
+              'No jobs found. Try another search or refresh job sources.',
+            )
+          else
+            ...items.map((job) {
+              final j = Map<String, dynamic>.from(job as Map);
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${j['title'] ?? 'Untitled role'}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
+                              ),
+                            ),
+                          ),
+                          if (j['match_score'] != null)
+                            Text(
+                              '${j['match_score']}% match',
+                              style: const TextStyle(
+                                color: blue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                        ],
+                      ),
+                      Text(
+                        '${j['company'] ?? 'Company not listed'} · ${j['location'] ?? 'Location not listed'}',
+                        style: const TextStyle(color: Colors.blueGrey),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        (j['snippet'] ?? '').toString(),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              try {
+                                if (j['is_saved'] == true) {
+                                  await Api.request(
+                                    '/saved-jobs/${j['id']}/',
+                                    method: 'DELETE',
+                                  );
+                                } else {
+                                  await Api.request(
+                                    '/saved-jobs/',
+                                    method: 'POST',
+                                    body: {'job_id': j['id']},
+                                  );
+                                }
+                                await load();
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _snack(context, e.toString());
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.bookmark_border),
+                            label: Text(
+                              j['is_saved'] == true ? 'Saved' : 'Save',
+                            ),
+                          ),
+                          FilledButton.tonal(
+                            onPressed: () async {
+                              try {
+                                await Api.request(
+                                  '/applications/',
+                                  method: 'POST',
+                                  body: {'job_id': j['id']},
+                                );
+                                if (context.mounted) {
+                                  _snack(
+                                    context,
+                                    'Added to your application tracker',
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  _snack(context, e.toString());
+                                }
+                              }
+                            },
+                            child: const Text('Track job'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
 
 class ApplicationsScreen extends StatefulWidget{const ApplicationsScreen({super.key});@override State<ApplicationsScreen> createState()=>_ApplicationsScreenState();}
 class _ApplicationsScreenState extends State<ApplicationsScreen>{List rows=[];String filter='all';@override void initState(){super.initState();load();}Future<void>load()async{try{final r=await Api.request('/applications/');if(mounted)setState(()=>rows=(r['results']??[]) as List);}catch(e){_snack(context,e.toString());}}
